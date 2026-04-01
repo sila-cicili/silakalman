@@ -72,6 +72,29 @@ def run_demo(out_dir):
         gnss_time, [], gnss_dist, gnss_speed_w_std, gnss_dist_w_std
     )
 
+    # --- Export raw sensor data and reference trajectory as CSV ---
+    # IMU CSV: time, acc_x, acc_y, acc_z, gyro_x, gyro_y, gyro_z
+    imu_csv = os.path.join(out_dir, 'imu.csv')
+    with open(imu_csv, 'w', encoding='utf-8') as fh:
+        fh.write('time,acc_x,acc_y,acc_z,gyro_x,gyro_y,gyro_z\n')
+        for tt, acc, gyr in zip(imu_time, imu_accel, imu_gyro):
+            fh.write(f"{tt:.6f},{acc.item((0,0)):.6f},{acc.item((1,0)):.6f},{acc.item((2,0)):.6f},{gyr.item((0,0)):.6f},{gyr.item((1,0)):.6f},{gyr.item((2,0)):.6f}\n")
+
+    # GNSS CSV: time, x, y, z
+    gnss_csv = os.path.join(out_dir, 'gnss.csv')
+    with open(gnss_csv, 'w', encoding='utf-8') as fh:
+        fh.write('time,x,y,z\n')
+        for tt, gd in zip(gnss_time, gnss_dist):
+            fh.write(f"{tt:.6f},{gd.item((0,0)):.6f},{gd.item((1,0)):.6f},{gd.item((2,0)):.6f}\n")
+
+    # Reference trajectory CSV: time, ref_x, ref_y, ref_z
+    ref_csv = os.path.join(out_dir, 'reference.csv')
+    with open(ref_csv, 'w', encoding='utf-8') as fh:
+        fh.write('time,ref_x,ref_y,ref_z\n')
+        # global_dist has same length as imu_time
+        for tt, gd in zip(imu_time, global_dist):
+            fh.write(f"{tt:.6f},{gd.item((0,0)):.6f},{gd.item((1,0)):.6f},{gd.item((2,0)):.6f}\n")
+
     # Extract position and speed for plotting
     pos_x = [ s.item((0,0)) for s in state_list ]
     pos_y = [ s.item((1,0)) for s in state_list ]
