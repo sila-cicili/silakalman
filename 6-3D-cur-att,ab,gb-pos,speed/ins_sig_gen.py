@@ -234,7 +234,6 @@ def get_body_motion( psi0, theta0, gamma0, rot_changes_x, rot_changes_y, rot_cha
 def get_gnss_signal( global_speed_norm, global_dist, gnss_speed_w_std, gnss_dist_w_std, gnss_period, imu_period ):
 	gnss_time = np.arange( gnss_period, len( global_speed_norm ) * imu_period, gnss_period )
 	gnss_dist = []
-	gnss_speed = []
 	gnss_coeff = 1 / imu_period
 	
 	for t in gnss_time:	
@@ -258,18 +257,9 @@ def get_gnss_signal( global_speed_norm, global_dist, gnss_speed_w_std, gnss_dist
 			]) 
 		)		
 		
-		# Speed
-		speed_norm = global_speed_norm[int( gnss_coeff * t )]
-		# Speed white noise
-		speed_noise = np.matrix([
-			[ np.random.normal( 0, gnss_speed_w_std ) ]
-		])
-		# GNSS speed
-		gnss_speed.append( 
-			speed_norm + speed_noise
-		)	
+
 	
-	return [ gnss_time, gnss_speed, gnss_dist ]
+	return [ gnss_time, gnss_dist ]
 
 def get_imu_signal( body_accel, body_attitude_speed, accel_bias0, acc_w_std, gyro_bias0, gyro_w_std, period ):
 	# Simulation time
@@ -359,10 +349,10 @@ def generate_signals(
 	)	
 	######################### GNSS DATA
 	[ 
-		gnss_time, gnss_speed, gnss_dist 
+		gnss_time, gnss_dist 
 	] = get_gnss_signal(
 		global_speed_norm, global_dist, gnss_speed_w_std, gnss_dist_w_std, gnss_period, imu_period
-	)	
+	)
 	######################### IMU DATA
 	[ 
 		imu_time, imu_accel, imu_accel_bias, imu_gyro, imu_gyro_bias
@@ -373,7 +363,7 @@ def generate_signals(
 	return [ 
 		# System inputs
 		imu_time, imu_accel, imu_gyro,
-		gnss_time, gnss_speed, gnss_dist,
+		gnss_time, gnss_dist,
 		# Reference data
 		imu_accel_bias, imu_gyro_bias, global_attitude,
 		global_accel, global_speed, global_speed_norm, global_dist 

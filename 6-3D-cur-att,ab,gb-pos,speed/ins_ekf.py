@@ -288,38 +288,21 @@ def exec_h_func( x_vect, period ):
 	pos_gx   	 = x_vect.item( ( 0, 0 ) )
 	pos_gy   	 = x_vect.item( ( 1, 0 ) )
 	pos_gz   	 = x_vect.item( ( 2, 0 ) )
-	speed_gx	 = x_vect.item( ( 3, 0 ) )
-	speed_gy 	 = x_vect.item( ( 4, 0 ) )
-	speed_gz 	 = x_vect.item( ( 5, 0 ) )
-	
-	speed_norm   = np.sqrt( speed_gx**2 + speed_gy**2 + speed_gz**2 )
-	
+
+	# Measurement contains only GNSS position (X, Y, Z)
 	return np.matrix([
 		[ pos_gx ],
 		[ pos_gy ],
-		[ pos_gz ],
-		[ speed_norm ]
+		[ pos_gz ]
 	])	
 	
 # Measurement Jacobian matrix
 def get_H_matrix( x_vect, period ):
-	speed_gx	 = x_vect.item( ( 3, 0 ) )
-	speed_gy 	 = x_vect.item( ( 4, 0 ) )
-	speed_gz 	 = x_vect.item( ( 5, 0 ) )
-	speed_norm   = np.sqrt( speed_gx**2 + speed_gy**2 + speed_gz**2 ) + 0.000000001
-	
-	# d(speed_norm)/d(speed_gx)
-	d_sn_d_sgx = speed_gx / speed_norm
-	# d(speed_norm)/d(speed_gy)
-	d_sn_d_sgy = speed_gy / speed_norm
-	# d(speed_norm)/d(speed_gz)
-	d_sn_d_sgz = speed_gz / speed_norm
-
+	# Measurement Jacobian for position-only GNSS: identity on position states
 	return np.matrix([
-		[ 1,  0,  0,  0,          0,           0,           0,  0,  0,  0,  0,  0,  0,  0,  0 ],
-		[ 0,  1,  0,  0,          0,           0,           0,  0,  0,  0,  0,  0,  0,  0,  0 ],
-		[ 0,  0,  1,  0,          0,           0,           0,  0,  0,  0,  0,  0,  0,  0,  0 ],
-		[ 0,  0,  0,  d_sn_d_sgx, d_sn_d_sgy,  d_sn_d_sgz,  0,  0,  0,  0,  0,  0,  0,  0,  0 ]
+		[ 1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0 ],
+		[ 0,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0 ],
+		[ 0,  0,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0 ]
 	])
 	
 def ins_ext_kfilter( imu_time, imu_accel, imu_gyro, accel_bias_std, accel_w_std, gyro_bias_std, gyro_w_std,
@@ -404,12 +387,11 @@ def ins_ext_kfilter( imu_time, imu_accel, imu_gyro, accel_bias_std, accel_w_std,
 		[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 	])
 	'''
-	# Measurement noise matrix
+	# Measurement noise matrix for GNSS position-only measurements
 	R = np.matrix([
-		[gnss_dist_std**2, 0, 0,  0 ],
-		[0, gnss_dist_std**2, 0,  0 ],
-		[0, 0, gnss_dist_std**2,  0 ],
-		[0, 0, 0, gnss_speed_std**2 ]
+		[gnss_dist_std**2, 0, 0 ],
+		[0, gnss_dist_std**2, 0 ],
+		[0, 0, gnss_dist_std**2 ]
 	])
 	# State covariance matrix
 	P = np.matrix([
@@ -459,16 +441,14 @@ def ins_ext_kfilter( imu_time, imu_accel, imu_gyro, accel_bias_std, accel_w_std,
 		# Gnss data is available
 		if ( gnss_i < len( gnss_time ) and t > gnss_time[ gnss_i ] ):				
 			# ----- Kalman update step
-			# Measurement matrix
+			# Measurement matrix (GNSS provides only position)
 			Z = np.matrix([
 				# X position
 				[ gnss_dist[ gnss_i ].item( ( 0, 0 ) ) ],
 				# Y position
 				[ gnss_dist[ gnss_i ].item( ( 1, 0 ) ) ],
 				# Z position
-				[ gnss_dist[ gnss_i ].item( ( 2, 0 ) ) ],
-				# Speed norm
-				[ gnss_speed[ gnss_i ].item( ( 0, 0 ) ) ]
+				[ gnss_dist[ gnss_i ].item( ( 2, 0 ) ) ]
 			])
 			H = get_H_matrix( X, imu_dt )		
 			# Calculate gain
