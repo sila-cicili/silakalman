@@ -10,6 +10,7 @@ sys.path.append(os.path.dirname(__file__))
 
 import ins_sig_gen
 import ins_ekf
+import argparse
 
 
 def ensure_out_dir(path):
@@ -17,7 +18,7 @@ def ensure_out_dir(path):
         os.makedirs(path)
 
 
-def run_demo(out_dir):
+def run_demo(out_dir, imu_time=None, imu_accel=None, imu_gyro=None, gnss_time=None, gnss_dist=None, global_dist=None):
     ensure_out_dir(out_dir)
 
     # Demo parameters (small example)
@@ -37,23 +38,32 @@ def run_demo(out_dir):
     gnss_speed_w_std = 0.1
     gnss_dist_w_std = 1.0
 
-    # Generate signals
-    ( imu_time, imu_accel, imu_gyro,
-      gnss_time, gnss_dist,
-      imu_accel_bias, imu_gyro_bias, global_attitude,
-      global_accel, global_speed, global_speed_norm, global_dist ) = ins_sig_gen.generate_signals(
-        speed_changes,
-        rot_changes_x, rot_changes_y, rot_changes_z,
-        attitude0,
-        imu_period,
-        acc_bias0,
-        acc_w_std,
-        gyro_bias0,
-        gyro_w_std,
-        gnss_period,
-        gnss_speed_w_std,
-        gnss_dist_w_std
-    )
+    # If CSV data wasn't provided, generate synthetic signals
+    if imu_time is None or imu_accel is None or imu_gyro is None:
+        ( imu_time, imu_accel, imu_gyro,
+            gnss_time, gnss_dist,
+            imu_accel_bias, imu_gyro_bias, global_attitude,
+            global_accel, global_speed, global_speed_norm, global_dist ) = ins_sig_gen.generate_signals(
+                speed_changes,
+                rot_changes_x, rot_changes_y, rot_changes_z,
+                attitude0,
+                imu_period,
+                acc_bias0,
+                acc_w_std,
+                gyro_bias0,
+                gyro_w_std,
+                gnss_period,
+                gnss_speed_w_std,
+                gnss_dist_w_std
+        )
+    else:
+        # If CSV provided, ensure we have GNSS and global_dist variables (may be None)
+        imu_accel_bias = None
+        imu_gyro_bias = None
+        global_attitude = None
+        global_accel = None
+        global_speed = None
+        global_speed_norm = None
 
     # EKF parameters
     accel_bias_std = 0.1
@@ -88,12 +98,14 @@ def run_demo(out_dir):
             fh.write(f"{tt:.6f},{gd.item((0,0)):.6f},{gd.item((1,0)):.6f},{gd.item((2,0)):.6f}\n")
 
     # Reference trajectory CSV: time, ref_x, ref_y, ref_z
-    ref_csv = os.path.join(out_dir, 'reference.csv')
-    with open(ref_csv, 'w', encoding='utf-8') as fh:
-        fh.write('time,ref_x,ref_y,ref_z\n')
-        # global_dist has same length as imu_time
-        for tt, gd in zip(imu_time, global_dist):
-            fh.write(f"{tt:.6f},{gd.item((0,0)):.6f},{gd.item((1,0)):.6f},{gd.item((2,0)):.6f}\n")
+    # Only export reference CSV if we actually have a reference trajectory
+    if global_dist is not None:
+        ref_csv = os.path.join(out_dir, 'reference.csv')
+        with open(ref_csv, 'w', encoding='utf-8') as fh:
+            fh.write('time,ref_x,ref_y,ref_z\n')
+            # global_dist has same length as imu_time
+            for tt, gd in zip(imu_time, global_dist):
+                fh.write(f"{tt:.6f},{gd.item((0,0)):.6f},{gd.item((1,0)):.6f},{gd.item((2,0)):.6f}\n")
 
     # Extract position and speed for plotting
     pos_x = [ s.item((0,0)) for s in state_list ]
@@ -118,13 +130,14 @@ def run_demo(out_dir):
     plt.fill_between(t, np.array(pos_y) - np.array(pos_std_y), np.array(pos_y) + np.array(pos_std_y), color='C1', alpha=0.2)
     plt.plot(t, pos_z, label='pos_z')
     plt.fill_between(t, np.array(pos_z) - np.array(pos_std_z), np.array(pos_z) + np.array(pos_std_z), color='C2', alpha=0.2)
-    # Reference (true) trajectory from global_dist
-    ref_x = [ d.item((0,0)) for d in global_dist ]
-    ref_y = [ d.item((1,0)) for d in global_dist ]
-    ref_z = [ d.item((2,0)) for d in global_dist ]
-    plt.plot(t, ref_x, '--', label='ref_x')
-    plt.plot(t, ref_y, '--', label='ref_y')
-    plt.plot(t, ref_z, '--', label='ref_z')
+    # Reference (true) trajectory from global_dist (only if provided)
+    if global_dist is not None:
+        ref_x = [ d.item((0,0)) for d in global_dist ]
+        ref_y = [ d.item((1,0)) for d in global_dist ]
+        ref_z = [ d.item((2,0)) for d in global_dist ]
+        plt.plot(t, ref_x, '--', label='ref_x')
+        plt.plot(t, ref_y, '--', label='ref_y')
+        plt.plot(t, ref_z, '--', label='ref_z')
     # GNSS measurements (sparser)
     gnss_x = [ g.item((0,0)) for g in gnss_dist ]
     gnss_y = [ g.item((1,0)) for g in gnss_dist ]
@@ -156,7 +169,8 @@ def run_demo(out_dir):
     plt.figure()
     plt.plot(pos_x, pos_y, label='est (x,y)')
     # optionally plot covariance ellipses could be added later
-    plt.plot(ref_x, ref_y, '--', label='ref (x,y)')
+    if global_dist is not None:
+        plt.plot(ref_x, ref_y, '--', label='ref (x,y)')
     plt.scatter(gnss_x, gnss_y, marker='x', color='k', label='gnss (x,y)')
     plt.xlabel('X (m)')
     plt.ylabel('Y (m)')
@@ -279,5 +293,81 @@ def run_demo(out_dir):
 
 
 if __name__ == '__main__':
-    out_dir = os.path.join(os.path.dirname(__file__), 'out')
-    run_demo(out_dir)
+    def load_imu_csv(path):
+        """Load IMU CSV with header: time,acc_x,acc_y,acc_z,gyro_x,gyro_y,gyro_z"""
+        try:
+            data = np.loadtxt(path, delimiter=',', skiprows=1)
+        except Exception as e:
+            print('Failed to load IMU CSV:', e)
+            raise
+        if data.ndim == 1:
+            data = data[np.newaxis, :]
+        times = data[:, 0].tolist()
+        accs = [ np.matrix([[r[1]],[r[2]],[r[3]]]) for r in data ]
+        gyrs = [ np.matrix([[r[4]],[r[5]],[r[6]]]) for r in data ]
+        return times, accs, gyrs
+
+    def load_gnss_csv(path):
+        """Load GNSS CSV with header: time,x,y,z"""
+        try:
+            data = np.loadtxt(path, delimiter=',', skiprows=1)
+        except Exception as e:
+            print('Failed to load GNSS CSV:', e)
+            raise
+        if data.ndim == 1:
+            data = data[np.newaxis, :]
+        times = data[:, 0].tolist()
+        dists = [ np.matrix([[r[1]],[r[2]],[r[3]]]) for r in data ]
+        return times, dists
+
+    def load_ref_csv(path, imu_times):
+        """Load reference CSV with header: time,ref_x,ref_y,ref_z and interpolate to imu_times"""
+        try:
+            data = np.loadtxt(path, delimiter=',', skiprows=1)
+        except Exception as e:
+            print('Failed to load reference CSV:', e)
+            raise
+        if data.ndim == 1:
+            data = data[np.newaxis, :]
+        ref_t = data[:, 0]
+        coords = data[:, 1:4]
+        # sort by time
+        order = np.argsort(ref_t)
+        ref_t = ref_t[order]
+        coords = coords[order]
+        imu_t = np.array(imu_times)
+        if ref_t.size == 1:
+            # single-point reference: repeat
+            x = np.full(imu_t.shape, coords[0,0])
+            y = np.full(imu_t.shape, coords[0,1])
+            z = np.full(imu_t.shape, coords[0,2])
+        else:
+            x = np.interp(imu_t, ref_t, coords[:,0])
+            y = np.interp(imu_t, ref_t, coords[:,1])
+            z = np.interp(imu_t, ref_t, coords[:,2])
+        global_dist = [ np.matrix([[xx],[yy],[zz]]) for xx,yy,zz in zip(x,y,z) ]
+        return global_dist
+
+    parser = argparse.ArgumentParser(description='Run INS EKF demo or load CSV logs')
+    parser.add_argument('--out-dir', default=os.path.join(os.path.dirname(__file__), 'out'), help='output directory')
+    parser.add_argument('--imu-csv', help='IMU CSV path (time,acc_x,acc_y,acc_z,gyro_x,gyro_y,gyro_z)')
+    parser.add_argument('--gnss-csv', help='GNSS CSV path (time,x,y,z)')
+    parser.add_argument('--ref-csv', help='Reference CSV path (time,ref_x,ref_y,ref_z)')
+    args = parser.parse_args()
+
+    out_dir = args.out_dir
+
+    if args.imu_csv:
+        if not args.gnss_csv:
+            print('When providing --imu-csv you must also provide --gnss-csv')
+            sys.exit(1)
+        imu_time, imu_accel, imu_gyro = load_imu_csv(args.imu_csv)
+        gnss_time, gnss_dist = load_gnss_csv(args.gnss_csv)
+        if args.ref_csv:
+            global_dist = load_ref_csv(args.ref_csv, imu_time)
+        else:
+            # No reference provided: mark as None so we skip reference plotting/export
+            global_dist = None
+        run_demo(out_dir, imu_time=imu_time, imu_accel=imu_accel, imu_gyro=imu_gyro, gnss_time=gnss_time, gnss_dist=gnss_dist, global_dist=global_dist)
+    else:
+        run_demo(out_dir)
